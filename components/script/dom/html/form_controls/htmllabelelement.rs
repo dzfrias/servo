@@ -6,6 +6,7 @@ use dom_struct::dom_struct;
 use html5ever::{LocalName, Prefix, local_name};
 use js::context::NoGC;
 use js::rust::HandleObject;
+use script_bindings::dom::UnrootedDom;
 use style::attr::AttrValue;
 
 use crate::dom::activation::Activatable;
@@ -187,6 +188,16 @@ impl HTMLLabelElement {
         self.upcast::<Node>()
             .traverse_preorder(ShadowIncluding::No)
             .filter_map(DomRoot::downcast::<HTMLElement>)
+            .find(|elem| elem.is_labelable_element())
+    }
+
+    pub(crate) fn first_labelable_descendant_unrooted<'a>(
+        &self,
+        no_gc: &'a NoGC,
+    ) -> Option<UnrootedDom<'a, HTMLElement>> {
+        self.upcast::<Node>()
+            .traverse_preorder_non_rooting(no_gc, ShadowIncluding::No)
+            .filter_map(UnrootedDom::downcast::<HTMLElement>)
             .find(|elem| elem.is_labelable_element())
     }
 }

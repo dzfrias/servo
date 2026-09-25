@@ -12,7 +12,9 @@ use layout_api::{QueryMsg, ScrollContainerQueryFlags, ScrollContainerResponse};
 use rustc_hash::FxHashSet;
 use script_bindings::callback::RootedCallback;
 use script_bindings::codegen::GenericBindings::DocumentBinding::DocumentMethods;
-use script_bindings::codegen::GenericBindings::ElementBinding::ScrollLogicalPosition;
+use script_bindings::codegen::GenericBindings::ElementBinding::{
+    ElementMethods, ScrollLogicalPosition,
+};
 use script_bindings::codegen::GenericBindings::WindowBinding::ScrollBehavior;
 use script_bindings::dom::UnrootedDom;
 use style::attr::AttrValue;
@@ -24,7 +26,6 @@ use crate::dom::bindings::codegen::Bindings::EventHandlerBinding::{
     EventHandlerNonNull, OnErrorEventHandlerNonNull,
 };
 use crate::dom::bindings::codegen::Bindings::HTMLElementBinding::HTMLElementMethods;
-use crate::dom::bindings::codegen::Bindings::HTMLLabelElementBinding::HTMLLabelElementMethods;
 use crate::dom::bindings::codegen::Bindings::HTMLOrSVGElementBinding::FocusOptions;
 use crate::dom::bindings::codegen::Bindings::NodeBinding::Node_Binding::NodeMethods;
 use crate::dom::bindings::codegen::Bindings::ShadowRootBinding::ShadowRoot_Binding::ShadowRootMethods;
@@ -980,27 +981,7 @@ impl HTMLElement {
         no_gc: &'a NoGC,
         index: u32,
     ) -> Option<UnrootedDom<'a, Node>> {
-        let element = self.as_element();
-
-        // Traverse entire tree for <label> elements that have
-        // this as their control.
-        // There is room for performance optimization, as we don't need
-        // the actual result of GetControl, only whether the result
-        // would match self.
-        // (Even more room for performance optimization: do what
-        // nodelist ChildrenList does and keep a mutation-aware cursor
-        // around; this may be hard since labels need to keep working
-        // even as they get detached into a subtree and reattached to
-        // a document.)
-        let root_element = element.root_element();
-        let root_node = root_element.upcast::<Node>();
-        root_node
-            .traverse_preorder_non_rooting(no_gc, ShadowIncluding::No)
-            .filter_map(UnrootedDom::downcast::<HTMLLabelElement>)
-            .filter(|elem| match elem.GetControl(no_gc) {
-                Some(control) => &*control == self,
-                _ => false,
-            })
+        self.labels(no_gc)
             .nth(index as usize)
             .map(UnrootedDom::upcast)
     }
@@ -1008,18 +989,7 @@ impl HTMLElement {
     // https://html.spec.whatwg.org/multipage/#dom-lfe-labels
     // This counts the labels of the element, to support NodeList::Length
     pub(crate) fn labels_count(&self, no_gc: &NoGC) -> u32 {
-        // see label_at comments about performance
-        let element = self.as_element();
-        let root_element = element.root_element();
-        let root_node = root_element.upcast::<Node>();
-        root_node
-            .traverse_preorder_non_rooting(no_gc, ShadowIncluding::No)
-            .filter_map(UnrootedDom::downcast::<HTMLLabelElement>)
-            .filter(|elem| match elem.GetControl(no_gc) {
-                Some(control) => &*control == self,
-                _ => false,
-            })
-            .count() as u32
+        self.labels(no_gc).count() as u32
     }
 
     // https://html.spec.whatwg.org/multipage/#the-directionality.
@@ -1275,6 +1245,34 @@ impl HTMLElement {
         self.owner_document()
             .event_handler()
             .unassign_access_key(self);
+    }
+
+    /// Returns an iterator over lables of an element in tree order.
+    ///
+    /// See <https://html.spec.whatwg.org/multipage/forms.html#dom-lfe-labels>.
+    fn labels<'a>(
+        &self,
+        no_gc: &'a NoGC,
+    ) -> impl Iterator<Item = UnrootedDom<'a, HTMLLabelElement>> {
+        // Traverse entire tree for <label> elements
+        // Potential performance optimization: do what nodelist ChildrenList
+        // does and keep a mutation-aware cursor around; this may be hard
+        // since labels need to keep working even as they get detached into a
+        // subtree and reattached to a document.
+        self.as_element()
+            .root_element()
+            .upcast::<Node>()
+            .traverse_preorder_non_rooting(no_gc, ShadowIncluding::No)
+            .filter_map(UnrootedDom::downcast::<HTMLLabelElement>)
+            .filter(move |label| {
+                let label_elem = label.upcast::<Element>();
+                match label_elem.get_attribute_string_value(&local_name!("for")) {
+                    Some(id) => self.as_element().Id() == id && self.is_labelable_element(),
+                    None => label
+                        .first_labelable_descendant_unrooted(no_gc)
+                        .is_some_and(|labelable| *labelable == self),
+                }
+            })
     }
 }
 

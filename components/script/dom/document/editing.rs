@@ -115,6 +115,11 @@ impl Document {
                     if let Some(selection) = editing_context.selection_content(cx) &&
                         editing_context.cutting_and_pasting_enabled()
                     {
+                        let canceled = editing_context.fire_cut_beforeinput_event(cx);
+                        if canceled {
+                            return InputEventResult::empty();
+                        }
+
                         // Step 3.1. If there is a selection in an editable context where
                         // cutting is enabled, then
                         // Step 3.1.1. Copy the selected contents, if any, to the clipboard.
@@ -146,6 +151,12 @@ impl Document {
                         editing_context.cutting_and_pasting_enabled() &&
                         let Some(text_content) = clipboard_event.text_content()
                     {
+                        let canceled =
+                            editing_context.fire_paste_beforeinput_event(cx, &text_content);
+                        if canceled {
+                            return InputEventResult::empty();
+                        }
+
                         // Step 3.1. If there is a selection or cursor in an editable context
                         // where pasting is enabled, then
                         // Step 3.1.1. Insert the most suitable content found on the
@@ -513,6 +524,26 @@ impl EditingContext {
             EditingContext::Document(..) => {
                 // TODO(mrobinson): Add support for integration with contenteditable.
             },
+        }
+    }
+
+    /// Returns true iff the cut should be canceled.
+    pub(crate) fn fire_cut_beforeinput_event(&self, cx: &mut JSContext) -> bool {
+        match self {
+            EditingContext::TextControl(element) => element
+                .text_control_element()
+                .fire_beforeinput_event(cx, InputEventType::DeleteByCut, None),
+            EditingContext::Document(..) => false,
+        }
+    }
+
+    /// Returns true iff the paste should be canceled.
+    pub(crate) fn fire_paste_beforeinput_event(&self, cx: &mut JSContext, text: &str) -> bool {
+        match self {
+            EditingContext::TextControl(element) => element
+                .text_control_element()
+                .fire_beforeinput_event(cx, InputEventType::InsertFromPaste, Some(text)),
+            EditingContext::Document(..) => false,
         }
     }
 

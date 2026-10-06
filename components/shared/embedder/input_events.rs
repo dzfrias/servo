@@ -118,6 +118,9 @@ pub enum ClipboardAction {
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
 pub enum EditingAction {
     Backspace(EditingMotion),
+    StartComposition,
+    InsertCompositionText(String),
+    EndComposition(String),
     Clipboard(ClipboardAction),
     Delete,
     InsertNewline,

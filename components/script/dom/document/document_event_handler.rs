@@ -12,7 +12,7 @@ use embedder_traits::{
     Cursor, EmbedderMsg, ImeEvent, InputEvent, InputEventId, InputEventOutcome, InputEventResult,
     KeyboardEvent as EmbedderKeyboardEvent, MouseButton, MouseButtonAction, MouseButtonEvent,
     MouseLeftViewportEvent, TouchEvent as EmbedderTouchEvent, TouchEventType, TouchId,
-    TouchPointerType, UntrustedNodeAddress, WheelEvent as EmbedderWheelEvent,
+    TouchPointerType, UntrustedNodeAddress, WheelEvent as EmbedderWheelEvent, EditingAction
 };
 #[cfg(feature = "gamepad")]
 use embedder_traits::{
@@ -1686,12 +1686,28 @@ impl DocumentEventHandler {
             cancelable,
             Some(&self.window),
             0,
-            DOMString::from(composition_event.data),
+            DOMString::from(composition_event.data.as_str()),
         );
 
         let event = event.upcast::<Event>();
         event.fire(cx, focused_element.upcast());
-        event.flags().into()
+        let composition_event_result: InputEventResult = event.flags().into();
+
+        if event.flags().contains(EventFlags::Canceled | EventFlags::Handled) {
+            return composition_event_result;
+        }
+
+        let editing_action = match composition_event.state {
+            keyboard_types::CompositionState::Start => EditingAction::StartComposition,
+            keyboard_types::CompositionState::Update => EditingAction::InsertCompositionText(composition_event.data),
+            keyboard_types::CompositionState::End => EditingAction::EndComposition(composition_event.data),
+        };
+        let editing_host = document.editing_context(cx.no_gc(), focused_element.upcast());
+        if editing_host.perform_editing_action(cx, editing_action) {
+            return composition_event_result | InputEventResult::Consumed;
+        }
+
+        composition_event_result
     }
 
     fn handle_wheel_event(

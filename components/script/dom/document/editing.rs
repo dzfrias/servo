@@ -396,7 +396,8 @@ impl Document {
         // This function does not do any checks for whether or not we are actually inside an
         // editing host, since those checks are performed by exec_command_for_command_id either way.
         let (command, argument) = match editing_action {
-            EditingAction::MoveCursor(..) => return false,
+            // TODO: composition should be supported once editing hosts have selection support
+            EditingAction::MoveCursor(..) | EditingAction::StartComposition | EditingAction::EndComposition(..) => return false,
             EditingAction::SelectAll | EditingAction::Clipboard(_) => {
                 unreachable!("Should have been handled before this point.")
             },
@@ -433,7 +434,8 @@ impl Document {
             // > with value equal to the text the user provided. If the user inserts multiple
             // > characters at once or in quick succession, this specification does not define
             // > whether it is treated as one insertion or several consecutive insertions.
-            EditingAction::InsertText(text) => (
+            // TODO: composition should be supported once editing hosts have selection support
+            EditingAction::InsertText(text) | EditingAction::InsertCompositionText(text) => (
                 DOMString::from_static("inserttext"),
                 DOMString::from(text.as_str()),
             ),

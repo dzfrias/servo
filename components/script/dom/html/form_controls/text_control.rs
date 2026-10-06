@@ -68,6 +68,12 @@ pub(crate) trait TextControlElement {
                 IsComposing::NotComposing,
                 InputEventType::InsertText,
             ),
+            EditingAction::InsertCompositionText(ref text) => self.fire_beforeinput_event(
+                cx,
+                Some(text),
+                IsComposing::Composing,
+                InputEventType::InsertCompositionText,
+            ),
             EditingAction::Backspace(_) => self.fire_beforeinput_event(
                 cx,
                 None,

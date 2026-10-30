@@ -249,6 +249,10 @@ impl TextControlElement for HTMLTextAreaElement {
         true
     }
 
+    fn has_composing_text(&self) -> bool {
+        self.text_input.borrow().has_composing_text()
+    }
+
     fn has_selectable_text(&self) -> bool {
         !self.text_input.borrow().get_content().is_empty()
     }
@@ -338,6 +342,10 @@ impl TextControlElement for HTMLTextAreaElement {
                 self.queue_input_event(text, input_type);
                 self.value_dirty.set(true);
                 self.handle_text_content_changed(cx);
+                self.maybe_update_shared_selection();
+            },
+            KeyReaction::DispatchCompositionEnd(text) => {
+                self.queue_compositionend_event(text);
                 self.maybe_update_shared_selection();
             },
             KeyReaction::RedrawSelection => {
